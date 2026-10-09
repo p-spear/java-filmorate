@@ -1,6 +1,8 @@
 package ru.yandex.practicum.filmorate.controller;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import ru.yandex.practicum.filmorate.exception.ValidationException;
 import ru.yandex.practicum.filmorate.model.User;
@@ -18,12 +20,12 @@ public class UserController {
     private final Map<Long, User> users = new HashMap<>();
 
     @GetMapping
-    public Collection<User> findAll() {
-        return users.values();
+    public ResponseEntity<Collection<User>> findAll() {
+        return  ResponseEntity.ok(users.values());
     }
 
     @PostMapping
-    public User create(@RequestBody User user) {
+    public ResponseEntity<User> create(@RequestBody User user) {
         validateUser(user);
         if (user.getName() == null || user.getName().isBlank()) {
             user.setName(user.getLogin());
@@ -31,11 +33,13 @@ public class UserController {
         user.setId(getNextId());
         users.put(user.getId(), user);
         log.info("Создан пользователь: {}", user.getLogin());
-        return user;
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(user);
     }
 
     @PutMapping
-    public User update(@RequestBody User newUser) {
+    public ResponseEntity<User> update(@RequestBody User newUser) {
         if (newUser.getId() == null) {
             log.error("Ошибка валидации: id пользователя не указан");
             throw new ValidationException("Id должен быть указан");
@@ -50,7 +54,7 @@ public class UserController {
         }
         users.put(newUser.getId(), newUser);
         log.info("Обновлен пользователь: {}", newUser.getLogin());
-        return newUser;
+        return ResponseEntity.ok(newUser);
     }
 
     // вспомогательный метод для генерации идентификатора нового пользователя

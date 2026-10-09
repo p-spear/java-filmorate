@@ -4,6 +4,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import ru.yandex.practicum.filmorate.controller.FilmController;
 import ru.yandex.practicum.filmorate.controller.UserController;
 import ru.yandex.practicum.filmorate.exception.ValidationException;
@@ -11,6 +13,7 @@ import ru.yandex.practicum.filmorate.model.Film;
 import ru.yandex.practicum.filmorate.model.User;
 
 import java.time.LocalDate;
+import java.util.Collection;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -34,11 +37,14 @@ class FilmorateApplicationTests {
 		}
 
 		@Test
-		@DisplayName("Добавление корректного фильма")
+		@DisplayName("Добавление корректного фильма — 201 Created")
 		void shouldAddValidFilm() {
-			Film added = filmController.create(film);
-			assertNotNull(added.getId());
-			assertEquals(1, filmController.findAll().size());
+			ResponseEntity<Film> response = filmController.create(film);
+
+			assertEquals(HttpStatus.CREATED, response.getStatusCode());
+			assertNotNull(response.getBody());
+			assertNotNull(response.getBody().getId());
+			assertEquals(1, filmController.findAll().getBody().size());
 		}
 
 		@Test
@@ -110,6 +116,38 @@ class FilmorateApplicationTests {
 			film.setId(999L);
 			assertThrows(ValidationException.class, () -> filmController.update(film));
 		}
+
+		@Test
+		@DisplayName("Обновление существующего фильма — 200 OK")
+		void shouldUpdateExistingFilm() {
+			Film created = filmController.create(film).getBody();
+
+			Film updated = new Film();
+			updated.setId(created.getId());
+			updated.setName("Updated Name");
+			updated.setDescription("Updated Description");
+			updated.setReleaseDate(LocalDate.of(2001, 1, 1));
+			updated.setDuration(150);
+
+			ResponseEntity<Film> response = filmController.update(updated);
+
+			assertEquals(HttpStatus.OK, response.getStatusCode());
+			assertNotNull(response.getBody());
+			assertEquals("Updated Name", response.getBody().getName());
+			assertEquals(150, response.getBody().getDuration());
+		}
+
+		@Test
+		@DisplayName("Получение всех фильмов — 200 OK")
+		void shouldReturnAllFilms() {
+			filmController.create(film);
+
+			ResponseEntity<Collection<Film>> response = filmController.findAll();
+
+			assertEquals(HttpStatus.OK, response.getStatusCode());
+			assertNotNull(response.getBody());
+			assertEquals(1, response.getBody().size());
+		}
 	}
 
 	@Nested
@@ -130,18 +168,21 @@ class FilmorateApplicationTests {
 		}
 
 		@Test
-		@DisplayName("Создание корректного пользователя")
+		@DisplayName("Создание корректного пользователя — 201 Created")
 		void shouldCreateValidUser() {
-			User created = userController.create(user);
-			assertNotNull(created.getId());
-			assertEquals(1, userController.findAll().size());
+			ResponseEntity<User> response = userController.create(user);
+
+			assertEquals(HttpStatus.CREATED, response.getStatusCode());
+			assertNotNull(response.getBody());
+			assertNotNull(response.getBody().getId());
+			assertEquals(1, userController.findAll().getBody().size());
 		}
 
 		@Test
 		@DisplayName("Если имя пустое — используется логин")
 		void shouldUseLoginWhenNameIsEmpty() {
 			user.setName("");
-			User created = userController.create(user);
+			User created = userController.create(user).getBody();
 			assertEquals(user.getLogin(), created.getName());
 		}
 
@@ -149,7 +190,7 @@ class FilmorateApplicationTests {
 		@DisplayName("Если имя null — используется логин")
 		void shouldUseLoginWhenNameIsNull() {
 			user.setName(null);
-			User created = userController.create(user);
+			User created = userController.create(user).getBody();
 			assertEquals(user.getLogin(), created.getName());
 		}
 
@@ -207,6 +248,38 @@ class FilmorateApplicationTests {
 		void shouldThrowExceptionWhenUpdateUnknownUser() {
 			user.setId(999L);
 			assertThrows(ValidationException.class, () -> userController.update(user));
+		}
+
+		@Test
+		@DisplayName("Обновление существующего пользователя — 200 OK")
+		void shouldUpdateExistingUser() {
+			User created = userController.create(user).getBody();
+
+			User updated = new User();
+			updated.setId(created.getId());
+			updated.setEmail("new@mail.ru");
+			updated.setLogin("newlogin");
+			updated.setName("New Name");
+			updated.setBirthday(LocalDate.of(1995, 5, 5));
+
+			ResponseEntity<User> response = userController.update(updated);
+
+			assertEquals(HttpStatus.OK, response.getStatusCode());
+			assertNotNull(response.getBody());
+			assertEquals("new@mail.ru", response.getBody().getEmail());
+			assertEquals("newlogin", response.getBody().getLogin());
+		}
+
+		@Test
+		@DisplayName("Получение всех пользователей — 200 OK")
+		void shouldReturnAllUsers() {
+			userController.create(user);
+
+			ResponseEntity<Collection<User>> response = userController.findAll();
+
+			assertEquals(HttpStatus.OK, response.getStatusCode());
+			assertNotNull(response.getBody());
+			assertEquals(1, response.getBody().size());
 		}
 	}
 }

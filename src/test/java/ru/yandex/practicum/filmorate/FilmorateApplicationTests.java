@@ -4,282 +4,419 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import ru.yandex.practicum.filmorate.controller.FilmController;
 import ru.yandex.practicum.filmorate.controller.UserController;
+import ru.yandex.practicum.filmorate.exception.NotFoundException;
+import ru.yandex.practicum.filmorate.exception.ParameterNotValidException;
 import ru.yandex.practicum.filmorate.exception.ValidationException;
 import ru.yandex.practicum.filmorate.model.Film;
 import ru.yandex.practicum.filmorate.model.User;
+import ru.yandex.practicum.filmorate.service.FilmService;
+import ru.yandex.practicum.filmorate.service.UserService;
+import ru.yandex.practicum.filmorate.storage.film.InMemoryFilmStorage;
+import ru.yandex.practicum.filmorate.storage.user.InMemoryUserStorage;
 
 import java.time.LocalDate;
-import java.util.Collection;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class FilmorateApplicationTests {
 
+	private UserService userService;
+	private FilmService filmService;
+	private UserController userController;
+	private FilmController filmController;
+
+	@BeforeEach
+	void setUp() {
+		InMemoryUserStorage userStorage = new InMemoryUserStorage();
+		InMemoryFilmStorage filmStorage = new InMemoryFilmStorage();
+
+		userService = new UserService(userStorage);
+		filmService = new FilmService(filmStorage, userStorage);
+
+		userController = new UserController(userService);
+		filmController = new FilmController(filmService);
+	}
+
+	// ---------------- Вспомогательные фабрики ----------------
+
+	private User makeUser(String email, String login) {
+		User user = new User();
+		user.setEmail(email);
+		user.setLogin(login);
+		user.setName(login);
+		user.setBirthday(LocalDate.of(1990, 1, 1));
+		return user;
+	}
+
+	private Film makeFilm(String name) {
+		Film film = new Film();
+		film.setName(name);
+		film.setDescription("description");
+		film.setReleaseDate(LocalDate.of(2000, 1, 1));
+		film.setDuration(120);
+		return film;
+	}
+
+	// ---------------- ВАЛИДАЦИЯ ФИЛЬМОВ ----------------
+
 	@Nested
-	@DisplayName("Тесты валидации фильмов")
+	@DisplayName("Валидация фильмов")
 	class FilmValidationTests {
 
-		private FilmController filmController;
-		private Film film;
-
-		@BeforeEach
-		void setUp() {
-			filmController = new FilmController();
-			film = new Film();
-			film.setName("Test Film");
-			film.setDescription("Description");
-			film.setReleaseDate(LocalDate.of(2000, 1, 1));
-			film.setDuration(120);
-		}
-
 		@Test
-		@DisplayName("Добавление корректного фильма — 201 Created")
+		@DisplayName("Добавление корректного фильма")
 		void shouldAddValidFilm() {
-			ResponseEntity<Film> response = filmController.create(film);
-
-			assertEquals(HttpStatus.CREATED, response.getStatusCode());
-			assertNotNull(response.getBody());
-			assertNotNull(response.getBody().getId());
-			assertEquals(1, filmController.findAll().getBody().size());
+			Film added = filmService.add(makeFilm("Film"));
+			assertNotNull(added.getId());
+			assertEquals(1, filmService.getAll().size());
 		}
 
 		@Test
 		@DisplayName("Ошибка при пустом названии фильма")
-		void shouldThrowExceptionWhenNameIsEmpty() {
-			film.setName("");
-			assertThrows(ValidationException.class, () -> filmController.create(film));
+		void shouldThrowWhenNameIsEmpty() {
+			Film film = makeFilm("");
+			assertThrows(ValidationException.class, () -> filmService.add(film));
 		}
 
 		@Test
 		@DisplayName("Ошибка при названии из пробелов")
-		void shouldThrowExceptionWhenNameIsBlank() {
-			film.setName("   ");
-			assertThrows(ValidationException.class, () -> filmController.create(film));
+		void shouldThrowWhenNameIsBlank() {
+			Film film = makeFilm("   ");
+			assertThrows(ValidationException.class, () -> filmService.add(film));
 		}
 
 		@Test
 		@DisplayName("Ошибка при описании длиннее 200 символов")
-		void shouldThrowExceptionWhenDescriptionTooLong() {
+		void shouldThrowWhenDescriptionTooLong() {
+			Film film = makeFilm("Film");
 			film.setDescription("a".repeat(201));
-			assertThrows(ValidationException.class, () -> filmController.create(film));
+			assertThrows(ValidationException.class, () -> filmService.add(film));
 		}
 
 		@Test
-		@DisplayName("Описание ровно 200 символов — валидно (граничное условие)")
-		void shouldAcceptDescriptionOfExactly200Chars() {
+		@DisplayName("Описание ровно 200 символов — валидно")
+		void shouldAcceptDescriptionOfExactly200() {
+			Film film = makeFilm("Film");
 			film.setDescription("a".repeat(200));
-			assertDoesNotThrow(() -> filmController.create(film));
+			assertDoesNotThrow(() -> filmService.add(film));
 		}
 
 		@Test
 		@DisplayName("Ошибка при дате релиза раньше 28.12.1895")
-		void shouldThrowExceptionWhenReleaseDateTooEarly() {
+		void shouldThrowWhenReleaseDateTooEarly() {
+			Film film = makeFilm("Film");
 			film.setReleaseDate(LocalDate.of(1895, 12, 27));
-			assertThrows(ValidationException.class, () -> filmController.create(film));
+			assertThrows(ValidationException.class, () -> filmService.add(film));
 		}
 
 		@Test
-		@DisplayName("Дата релиза 28.12.1895 — валидна (граничное условие)")
+		@DisplayName("Дата релиза 28.12.1895 — валидна")
 		void shouldAcceptMinReleaseDate() {
+			Film film = makeFilm("Film");
 			film.setReleaseDate(LocalDate.of(1895, 12, 28));
-			assertDoesNotThrow(() -> filmController.create(film));
+			assertDoesNotThrow(() -> filmService.add(film));
 		}
 
 		@Test
-		@DisplayName("Ошибка при отрицательной продолжительности фильма")
-		void shouldThrowExceptionWhenDurationIsNegative() {
-			film.setDuration(-1);
-			assertThrows(ValidationException.class, () -> filmController.create(film));
-		}
-
-		@Test
-		@DisplayName("Ошибка при нулевой продолжительности фильма")
-		void shouldThrowExceptionWhenDurationIsZero() {
+		@DisplayName("Ошибка при нулевой/отрицательной продолжительности")
+		void shouldThrowWhenDurationNotPositive() {
+			Film film = makeFilm("Film");
 			film.setDuration(0);
-			assertThrows(ValidationException.class, () -> filmController.create(film));
+			assertThrows(ValidationException.class, () -> filmService.add(film));
+
+			Film film2 = makeFilm("Film2");
+			film2.setDuration(-5);
+			assertThrows(ValidationException.class, () -> filmService.add(film2));
 		}
 
 		@Test
-		@DisplayName("Ошибка обновления фильма без указания id")
-		void shouldThrowExceptionWhenUpdateWithoutId() {
-			film.setId(null);
-			assertThrows(ValidationException.class, () -> filmController.update(film));
-		}
-
-		@Test
-		@DisplayName("Ошибка обновления несуществующего фильма")
-		void shouldThrowExceptionWhenUpdateUnknownFilm() {
+		@DisplayName("Обновление несуществующего фильма → NotFoundException")
+		void shouldThrowWhenUpdateUnknownFilm() {
+			Film film = makeFilm("Film");
 			film.setId(999L);
-			assertThrows(ValidationException.class, () -> filmController.update(film));
+			assertThrows(NotFoundException.class, () -> filmService.update(film));
 		}
 
 		@Test
-		@DisplayName("Обновление существующего фильма — 200 OK")
-		void shouldUpdateExistingFilm() {
-			Film created = filmController.create(film).getBody();
-
-			Film updated = new Film();
-			updated.setId(created.getId());
-			updated.setName("Updated Name");
-			updated.setDescription("Updated Description");
-			updated.setReleaseDate(LocalDate.of(2001, 1, 1));
-			updated.setDuration(150);
-
-			ResponseEntity<Film> response = filmController.update(updated);
-
-			assertEquals(HttpStatus.OK, response.getStatusCode());
-			assertNotNull(response.getBody());
-			assertEquals("Updated Name", response.getBody().getName());
-			assertEquals(150, response.getBody().getDuration());
-		}
-
-		@Test
-		@DisplayName("Получение всех фильмов — 200 OK")
-		void shouldReturnAllFilms() {
-			filmController.create(film);
-
-			ResponseEntity<Collection<Film>> response = filmController.findAll();
-
-			assertEquals(HttpStatus.OK, response.getStatusCode());
-			assertNotNull(response.getBody());
-			assertEquals(1, response.getBody().size());
+		@DisplayName("Обновление без id → ValidationException")
+		void shouldThrowWhenUpdateWithoutId() {
+			Film film = makeFilm("Film");
+			assertThrows(ValidationException.class, () -> filmService.update(film));
 		}
 	}
 
+	// ---------------- ВАЛИДАЦИЯ ПОЛЬЗОВАТЕЛЕЙ ----------------
+
 	@Nested
-	@DisplayName("Тесты валидации пользователей")
+	@DisplayName("Валидация пользователей")
 	class UserValidationTests {
 
-		private UserController userController;
-		private User user;
-
-		@BeforeEach
-		void setUp() {
-			userController = new UserController();
-			user = new User();
-			user.setEmail("test@mail.ru");
-			user.setLogin("login");
-			user.setName("Name");
-			user.setBirthday(LocalDate.of(1990, 1, 1));
-		}
-
 		@Test
-		@DisplayName("Создание корректного пользователя — 201 Created")
+		@DisplayName("Создание корректного пользователя")
 		void shouldCreateValidUser() {
-			ResponseEntity<User> response = userController.create(user);
-
-			assertEquals(HttpStatus.CREATED, response.getStatusCode());
-			assertNotNull(response.getBody());
-			assertNotNull(response.getBody().getId());
-			assertEquals(1, userController.findAll().getBody().size());
+			User created = userService.add(makeUser("test@mail.ru", "login"));
+			assertNotNull(created.getId());
+			assertEquals(1, userService.getAll().size());
 		}
 
 		@Test
-		@DisplayName("Если имя пустое — используется логин")
+		@DisplayName("Пустое имя заменяется логином")
 		void shouldUseLoginWhenNameIsEmpty() {
+			User user = makeUser("test@mail.ru", "login");
 			user.setName("");
-			User created = userController.create(user).getBody();
-			assertEquals(user.getLogin(), created.getName());
+			User created = userService.add(user);
+			assertEquals("login", created.getName());
 		}
 
 		@Test
-		@DisplayName("Если имя null — используется логин")
+		@DisplayName("null-имя заменяется логином")
 		void shouldUseLoginWhenNameIsNull() {
+			User user = makeUser("test@mail.ru", "login");
 			user.setName(null);
-			User created = userController.create(user).getBody();
-			assertEquals(user.getLogin(), created.getName());
+			User created = userService.add(user);
+			assertEquals("login", created.getName());
 		}
 
 		@Test
-		@DisplayName("Ошибка при email без символа @")
-		void shouldThrowExceptionWhenEmailIsInvalid() {
-			user.setEmail("invalid-email");
-			assertThrows(ValidationException.class, () -> userController.create(user));
+		@DisplayName("Ошибка при email без @")
+		void shouldThrowWhenEmailInvalid() {
+			User user = makeUser("invalid-email", "login");
+			assertThrows(ValidationException.class, () -> userService.add(user));
 		}
 
 		@Test
 		@DisplayName("Ошибка при пустом email")
-		void shouldThrowExceptionWhenEmailIsEmpty() {
-			user.setEmail("");
-			assertThrows(ValidationException.class, () -> userController.create(user));
+		void shouldThrowWhenEmailEmpty() {
+			User user = makeUser("", "login");
+			assertThrows(ValidationException.class, () -> userService.add(user));
 		}
 
 		@Test
 		@DisplayName("Ошибка при логине с пробелами")
-		void shouldThrowExceptionWhenLoginHasSpaces() {
-			user.setLogin("log in");
-			assertThrows(ValidationException.class, () -> userController.create(user));
+		void shouldThrowWhenLoginHasSpaces() {
+			User user = makeUser("test@mail.ru", "log in");
+			assertThrows(ValidationException.class, () -> userService.add(user));
 		}
 
 		@Test
 		@DisplayName("Ошибка при пустом логине")
-		void shouldThrowExceptionWhenLoginIsEmpty() {
-			user.setLogin("");
-			assertThrows(ValidationException.class, () -> userController.create(user));
+		void shouldThrowWhenLoginEmpty() {
+			User user = makeUser("test@mail.ru", "");
+			assertThrows(ValidationException.class, () -> userService.add(user));
 		}
 
 		@Test
 		@DisplayName("Ошибка при дате рождения в будущем")
-		void shouldThrowExceptionWhenBirthdayIsInFuture() {
+		void shouldThrowWhenBirthdayInFuture() {
+			User user = makeUser("test@mail.ru", "login");
 			user.setBirthday(LocalDate.now().plusDays(1));
-			assertThrows(ValidationException.class, () -> userController.create(user));
+			assertThrows(ValidationException.class, () -> userService.add(user));
 		}
 
 		@Test
-		@DisplayName("Дата рождения сегодня — валидна (граничное условие)")
+		@DisplayName("Дата рождения сегодня — валидна")
 		void shouldAcceptTodayAsBirthday() {
+			User user = makeUser("test@mail.ru", "login");
 			user.setBirthday(LocalDate.now());
-			assertDoesNotThrow(() -> userController.create(user));
+			assertDoesNotThrow(() -> userService.add(user));
 		}
 
 		@Test
-		@DisplayName("Ошибка обновления пользователя без указания id")
-		void shouldThrowExceptionWhenUpdateWithoutId() {
-			user.setId(null);
-			assertThrows(ValidationException.class, () -> userController.update(user));
-		}
-
-		@Test
-		@DisplayName("Ошибка обновления несуществующего пользователя")
-		void shouldThrowExceptionWhenUpdateUnknownUser() {
+		@DisplayName("Обновление несуществующего пользователя → NotFoundException")
+		void shouldThrowWhenUpdateUnknownUser() {
+			User user = makeUser("test@mail.ru", "login");
 			user.setId(999L);
-			assertThrows(ValidationException.class, () -> userController.update(user));
+			assertThrows(NotFoundException.class, () -> userService.update(user));
 		}
 
 		@Test
-		@DisplayName("Обновление существующего пользователя — 200 OK")
-		void shouldUpdateExistingUser() {
-			User created = userController.create(user).getBody();
+		@DisplayName("Обновление без id → ValidationException")
+		void shouldThrowWhenUpdateWithoutId() {
+			User user = makeUser("test@mail.ru", "login");
+			assertThrows(ValidationException.class, () -> userService.update(user));
+		}
+	}
 
-			User updated = new User();
-			updated.setId(created.getId());
-			updated.setEmail("new@mail.ru");
-			updated.setLogin("newlogin");
-			updated.setName("New Name");
-			updated.setBirthday(LocalDate.of(1995, 5, 5));
+	// ---------------- ДРУЗЬЯ ----------------
 
-			ResponseEntity<User> response = userController.update(updated);
+	@Nested
+	@DisplayName("Друзья")
+	class FriendsTests {
 
-			assertEquals(HttpStatus.OK, response.getStatusCode());
-			assertNotNull(response.getBody());
-			assertEquals("new@mail.ru", response.getBody().getEmail());
-			assertEquals("newlogin", response.getBody().getLogin());
+		private User a;
+		private User b;
+		private User c;
+
+		@BeforeEach
+		void setUp() {
+			a = userService.add(makeUser("a@mail.ru", "a"));
+			b = userService.add(makeUser("b@mail.ru", "b"));
+			c = userService.add(makeUser("c@mail.ru", "c"));
 		}
 
 		@Test
-		@DisplayName("Получение всех пользователей — 200 OK")
-		void shouldReturnAllUsers() {
-			userController.create(user);
+		@DisplayName("Добавление в друзья взаимно")
+		void addFriendIsMutual() {
+			userService.addFriend(a.getId(), b.getId());
 
-			ResponseEntity<Collection<User>> response = userController.findAll();
+			assertEquals(1, userService.getFriends(a.getId()).size());
+			assertEquals(1, userService.getFriends(b.getId()).size());
+			assertEquals(b.getId(), userService.getFriends(a.getId()).get(0).getId());
+			assertEquals(a.getId(), userService.getFriends(b.getId()).get(0).getId());
+		}
 
-			assertEquals(HttpStatus.OK, response.getStatusCode());
-			assertNotNull(response.getBody());
-			assertEquals(1, response.getBody().size());
+		@Test
+		@DisplayName("Нельзя добавить в друзья самого себя")
+		void cannotAddSelf() {
+			assertThrows(ValidationException.class,
+					() -> userService.addFriend(a.getId(), a.getId()));
+		}
+
+		@Test
+		@DisplayName("Удаление из друзей взаимно")
+		void removeFriendIsMutual() {
+			userService.addFriend(a.getId(), b.getId());
+			userService.removeFriend(a.getId(), b.getId());
+
+			assertTrue(userService.getFriends(a.getId()).isEmpty());
+			assertTrue(userService.getFriends(b.getId()).isEmpty());
+		}
+
+		@Test
+		@DisplayName("Повторное добавление в друзья не создаёт дубль")
+		void addFriendTwiceKeepsSingleEntry() {
+			userService.addFriend(a.getId(), b.getId());
+			userService.addFriend(a.getId(), b.getId());
+
+			assertEquals(1, userService.getFriends(a.getId()).size());
+		}
+
+		@Test
+		@DisplayName("Общие друзья")
+		void commonFriends() {
+			userService.addFriend(a.getId(), c.getId());
+			userService.addFriend(b.getId(), c.getId());
+
+			List<User> common = userService.getCommonFriends(a.getId(), b.getId());
+			assertEquals(1, common.size());
+			assertEquals(c.getId(), common.get(0).getId());
+		}
+
+		@Test
+		@DisplayName("Общих друзей нет — пустой список")
+		void noCommonFriends() {
+			userService.addFriend(a.getId(), c.getId());
+			assertTrue(userService.getCommonFriends(a.getId(), b.getId()).isEmpty());
+		}
+
+		@Test
+		@DisplayName("Добавление в друзья несуществующего пользователя → 404")
+		void addUnknownFriend() {
+			assertThrows(NotFoundException.class,
+					() -> userService.addFriend(a.getId(), 999L));
+		}
+
+		@Test
+		@DisplayName("Получение друзей несуществующего пользователя → 404")
+		void getFriendsOfUnknown() {
+			assertThrows(NotFoundException.class,
+					() -> userService.getFriends(999L));
+		}
+	}
+
+	// ---------------- ЛАЙКИ И ПОПУЛЯРНЫЕ ФИЛЬМЫ ----------------
+
+	@Nested
+	@DisplayName("Лайки и популярные фильмы")
+	class LikesTests {
+
+		private User u1;
+		private User u2;
+		private Film f1;
+		private Film f2;
+
+		@BeforeEach
+		void setUp() {
+			u1 = userService.add(makeUser("u1@mail.ru", "u1"));
+			u2 = userService.add(makeUser("u2@mail.ru", "u2"));
+			f1 = filmService.add(makeFilm("F1"));
+			f2 = filmService.add(makeFilm("F2"));
+		}
+
+		@Test
+		@DisplayName("Лайк уникален для пользователя")
+		void likeIsUnique() {
+			filmService.addLike(f1.getId(), u1.getId());
+			filmService.addLike(f1.getId(), u1.getId());
+
+			assertEquals(1, filmService.getById(f1.getId()).getLikes().size());
+		}
+
+		@Test
+		@DisplayName("Удаление лайка")
+		void removeLike() {
+			filmService.addLike(f1.getId(), u1.getId());
+			filmService.removeLike(f1.getId(), u1.getId());
+
+			assertTrue(filmService.getById(f1.getId()).getLikes().isEmpty());
+		}
+
+		@Test
+		@DisplayName("Удаление несуществующего лайка — идемпотентно")
+		void removeNonExistingLikeIsIdempotent() {
+			assertDoesNotThrow(() -> filmService.removeLike(f1.getId(), u1.getId()));
+		}
+
+		@Test
+		@DisplayName("Лайк несуществующего фильма → 404")
+		void likeUnknownFilm() {
+			assertThrows(NotFoundException.class,
+					() -> filmService.addLike(999L, u1.getId()));
+		}
+
+		@Test
+		@DisplayName("Лайк несуществующим пользователем → 404")
+		void likeByUnknownUser() {
+			assertThrows(NotFoundException.class,
+					() -> filmService.addLike(f1.getId(), 999L));
+		}
+
+		@Test
+		@DisplayName("Популярные фильмы сортируются по количеству лайков")
+		void popularOrder() {
+			filmService.addLike(f2.getId(), u1.getId());
+			filmService.addLike(f2.getId(), u2.getId());
+			filmService.addLike(f1.getId(), u1.getId());
+
+			List<Film> popular = filmService.getPopular(10);
+			assertEquals(2, popular.size());
+			assertEquals(f2.getId(), popular.get(0).getId());
+			assertEquals(f1.getId(), popular.get(1).getId());
+		}
+
+		@Test
+		@DisplayName("Популярные фильмы ограничиваются count")
+		void popularLimit() {
+			// f2 — 2 лайка, f1 — 1 лайк → порядок однозначен
+			filmService.addLike(f2.getId(), u1.getId());
+			filmService.addLike(f2.getId(), u2.getId());
+			filmService.addLike(f1.getId(), u1.getId());
+
+			List<Film> popular = filmService.getPopular(1);
+			assertEquals(1, popular.size());
+			assertEquals(f2.getId(), popular.get(0).getId());
+		}
+
+		@Test
+		@DisplayName("count <= 0 → ParameterNotValidException через контроллер")
+		void popularInvalidCountViaController() {
+			assertThrows(ParameterNotValidException.class,
+					() -> filmController.getPopular(0));
+			assertThrows(ParameterNotValidException.class,
+					() -> filmController.getPopular(-1));
 		}
 	}
 }

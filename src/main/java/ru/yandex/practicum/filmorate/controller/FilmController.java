@@ -1,83 +1,65 @@
 package ru.yandex.practicum.filmorate.controller;
 
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import ru.yandex.practicum.filmorate.exception.ValidationException;
+import ru.yandex.practicum.filmorate.exception.ParameterNotValidException;
 import ru.yandex.practicum.filmorate.model.Film;
+import ru.yandex.practicum.filmorate.service.FilmService;
 
-import java.time.LocalDate;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.List;
 
 @RestController
 @RequestMapping("/films")
-@Slf4j
 public class FilmController {
 
-    private final Map<Long, Film> films = new HashMap<>();
-    private static final LocalDate MIN_RELEASE_DATE = LocalDate.of(1895, 12, 28);
+    private final FilmService filmService;
+
+    public FilmController(FilmService filmService) {
+        this.filmService = filmService;
+    }
 
     @GetMapping
     public ResponseEntity<Collection<Film>> findAll() {
-        return ResponseEntity.ok(films.values());
+        return ResponseEntity.ok(filmService.getAll());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Film> findById(@PathVariable Long id) {
+        return ResponseEntity.ok(filmService.getById(id));
     }
 
     @PostMapping
     public ResponseEntity<Film> create(@RequestBody Film film) {
-        validateFilm(film);
-        film.setId(getNextId());
-        films.put(film.getId(), film);
-        log.info("Добавлен фильм: {}", film.getName());
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(film);
+        return ResponseEntity.status(HttpStatus.CREATED).body(filmService.add(film));
     }
 
     @PutMapping
-    public ResponseEntity<Film> update(@RequestBody Film newFilm) {
-        if (newFilm.getId() == null) {
-            log.error("Ошибка валидации: id фильма не указан");
-            throw new ValidationException("Id должен быть указан");
-        }
-        if (!films.containsKey(newFilm.getId())) {
-            log.error("Фильм с id {} не найден", newFilm.getId());
-            throw new ValidationException("Фильм с id = " + newFilm.getId() + " не найден");
-        }
-        validateFilm(newFilm);
-        films.put(newFilm.getId(), newFilm);
-        log.info("Обновлен фильм: {}", newFilm.getName());
-        return ResponseEntity.ok(newFilm);
+    public ResponseEntity<Film> update(@RequestBody Film film) {
+        return ResponseEntity.ok(filmService.update(film));
     }
 
-    // вспомогательный метод для генерации идентификатора нового фильма
-    private long getNextId() {
-        long currentMaxId = films.keySet()
-                .stream()
-                .mapToLong(id -> id)
-                .max()
-                .orElse(0);
-        return ++currentMaxId;
+    @PutMapping("/{id}/like/{userId}")
+    public ResponseEntity<Void> addLike(@PathVariable Long id, @PathVariable Long userId) {
+        filmService.addLike(id, userId);
+        return ResponseEntity.ok().build();
     }
 
-    private void validateFilm(Film film) {
-        if (film.getName() == null || film.getName().isBlank()) {
-            log.error("Ошибка валидации: пустое название фильма");
-            throw new ValidationException("Название фильма не может быть пустым");
+    @DeleteMapping("/{id}/like/{userId}")
+    public ResponseEntity<Void> removeLike(@PathVariable Long id, @PathVariable Long userId) {
+        filmService.removeLike(id, userId);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/popular")
+    public ResponseEntity<List<Film>> getPopular(
+            @RequestParam(defaultValue = "10") int count) {
+
+        if (count <= 0) {
+            throw new ParameterNotValidException("count", "значение должно быть положительным числом");
         }
-        if (film.getDescription() != null && film.getDescription().length() > 200) {
-            log.error("Ошибка валидации: описание фильма превышает 200 символов");
-            throw new ValidationException("Максимальная длина описания — 200 символов");
-        }
-        if (film.getReleaseDate() == null || film.getReleaseDate().isBefore(MIN_RELEASE_DATE)) {
-            log.error("Ошибка валидации: дата релиза раньше 28.12.1895");
-            throw new ValidationException("Дата релиза не может быть раньше 28 декабря 1895 года");
-        }
-        if (film.getDuration() == null || film.getDuration() <= 0) {
-            log.error("Ошибка валидации: продолжительность фильма должна быть положительной");
-            throw new ValidationException("Продолжительность фильма должна быть положительным числом");
-        }
+
+        return ResponseEntity.ok(filmService.getPopular(count));
     }
 }

@@ -1,42 +1,48 @@
 package ru.yandex.practicum.filmorate.controller;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import ru.yandex.practicum.filmorate.dto.UserMapper;
+import ru.yandex.practicum.filmorate.dto.UserResponse;
 import ru.yandex.practicum.filmorate.model.User;
 import ru.yandex.practicum.filmorate.service.UserService;
 
-import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/users")
+@RequiredArgsConstructor
 public class UserController {
 
     private final UserService userService;
 
-    public UserController(UserService userService) {
-        this.userService = userService;
-    }
-
     @GetMapping
-    public ResponseEntity<Collection<User>> findAll() {
-        return ResponseEntity.ok(userService.getAll());
+    public ResponseEntity<List<UserResponse>> findAll() {
+        List<UserResponse> body = userService.getAll().stream()
+                .map(UserMapper::toResponse)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(body);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<User> findById(@PathVariable Long id) {
-        return ResponseEntity.ok(userService.getById(id));
+    public ResponseEntity<UserResponse> findById(@PathVariable Long id) {
+        return ResponseEntity.ok(UserMapper.toResponse(userService.getById(id)));
     }
 
     @PostMapping
-    public ResponseEntity<User> create(@RequestBody User user) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(userService.add(user));
+    public ResponseEntity<UserResponse> create(@RequestBody User user) {
+        User created = userService.add(user);
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(UserMapper.toResponse(created));
     }
 
     @PutMapping
-    public ResponseEntity<User> update(@RequestBody User user) {
-        return ResponseEntity.ok(userService.update(user));
+    public ResponseEntity<UserResponse> update(@RequestBody User user) {
+        return ResponseEntity.ok(UserMapper.toResponse(userService.update(user)));
     }
 
     @PutMapping("/{id}/friends/{friendId}")
@@ -52,13 +58,19 @@ public class UserController {
     }
 
     @GetMapping("/{id}/friends")
-    public ResponseEntity<List<User>> getFriends(@PathVariable Long id) {
-        return ResponseEntity.ok(userService.getFriends(id));
+    public ResponseEntity<List<UserResponse>> getFriends(@PathVariable Long id) {
+        List<UserResponse> body = userService.getFriends(id).stream()
+                .map(UserMapper::toResponse)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(body);
     }
 
     @GetMapping("/{id}/friends/common/{otherId}")
-    public ResponseEntity<List<User>> getCommonFriends(@PathVariable Long id,
-                                                       @PathVariable Long otherId) {
-        return ResponseEntity.ok(userService.getCommonFriends(id, otherId));
+    public ResponseEntity<List<UserResponse>> getCommonFriends(@PathVariable Long id,
+                                                               @PathVariable Long otherId) {
+        List<UserResponse> body = userService.getCommonFriends(id, otherId).stream()
+                .map(UserMapper::toResponse)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(body);
     }
 }

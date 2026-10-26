@@ -1,43 +1,48 @@
 package ru.yandex.practicum.filmorate.controller;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import ru.yandex.practicum.filmorate.exception.ParameterNotValidException;
+import ru.yandex.practicum.filmorate.dto.FilmMapper;
+import ru.yandex.practicum.filmorate.dto.FilmResponse;
 import ru.yandex.practicum.filmorate.model.Film;
 import ru.yandex.practicum.filmorate.service.FilmService;
 
-import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/films")
+@RequiredArgsConstructor
 public class FilmController {
 
     private final FilmService filmService;
 
-    public FilmController(FilmService filmService) {
-        this.filmService = filmService;
-    }
-
     @GetMapping
-    public ResponseEntity<Collection<Film>> findAll() {
-        return ResponseEntity.ok(filmService.getAll());
+    public ResponseEntity<List<FilmResponse>> findAll() {
+        List<FilmResponse> body = filmService.getAll().stream()
+                .map(FilmMapper::toResponse)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(body);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Film> findById(@PathVariable Long id) {
-        return ResponseEntity.ok(filmService.getById(id));
+    public ResponseEntity<FilmResponse> findById(@PathVariable Long id) {
+        return ResponseEntity.ok(FilmMapper.toResponse(filmService.getById(id)));
     }
 
     @PostMapping
-    public ResponseEntity<Film> create(@RequestBody Film film) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(filmService.add(film));
+    public ResponseEntity<FilmResponse> create(@RequestBody Film film) {
+        Film created = filmService.add(film);
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(FilmMapper.toResponse(created));
     }
 
     @PutMapping
-    public ResponseEntity<Film> update(@RequestBody Film film) {
-        return ResponseEntity.ok(filmService.update(film));
+    public ResponseEntity<FilmResponse> update(@RequestBody Film film) {
+        return ResponseEntity.ok(FilmMapper.toResponse(filmService.update(film)));
     }
 
     @PutMapping("/{id}/like/{userId}")
@@ -53,13 +58,17 @@ public class FilmController {
     }
 
     @GetMapping("/popular")
-    public ResponseEntity<List<Film>> getPopular(
+    public ResponseEntity<List<FilmResponse>> getPopular(
             @RequestParam(defaultValue = "10") int count) {
 
         if (count <= 0) {
-            throw new ParameterNotValidException("count", "значение должно быть положительным числом");
+            throw new ru.yandex.practicum.filmorate.exception.ParameterNotValidException(
+                    "count", "значение должно быть положительным числом");
         }
 
-        return ResponseEntity.ok(filmService.getPopular(count));
+        List<FilmResponse> body = filmService.getPopular(count).stream()
+                .map(FilmMapper::toResponse)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(body);
     }
 }

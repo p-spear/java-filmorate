@@ -2,6 +2,7 @@ package ru.yandex.practicum.filmorate.controller;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -27,9 +28,7 @@ public class ErrorHandler {
     public ErrorResponse handleParameterNotValid(final ParameterNotValidException e) {
         log.warn("Некорректное значение параметра {}: {}", e.getParameter(), e.getReason());
         return new ErrorResponse(
-                "Некорректное значение параметра " + e.getParameter() + ": " + e.getReason(),
-                ""
-        );
+                "Некорректное значение параметра " + e.getParameter() + ": " + e.getReason(), "");
     }
 
     @ExceptionHandler
@@ -43,10 +42,18 @@ public class ErrorHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ErrorResponse handleTypeMismatch(MethodArgumentTypeMismatchException e) {
         log.warn("Некорректный параметр {}: {}", e.getName(), e.getValue());
-        return new ErrorResponse(
-                "Некорректное значение параметра",
-                "Параметр " + e.getName() + " не соответствует переданному в него типу значения: " + e.getValue()
-        );
+        return new ErrorResponse("Некорректное значение параметра",
+                "Параметр " + e.getName() + " не соответствует переданному в него типу: " + e.getValue());
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handleBeanValidation(MethodArgumentNotValidException e) {
+        String msg = e.getBindingResult().getFieldErrors().stream()
+                .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
+                .findFirst().orElse("Ошибка валидации");
+        log.warn("Ошибка Bean Validation: {}", msg);
+        return new ErrorResponse(msg, "");
     }
 
     @ExceptionHandler

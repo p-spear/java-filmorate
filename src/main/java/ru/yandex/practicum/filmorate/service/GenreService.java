@@ -12,6 +12,11 @@ import java.util.List;
 public class GenreService {
     private final GenreRepository genreRepository;
 
-    public List<Genre> getAll() { return genreRepository.findAll(); }
-    public Genre getById(long id) { return genreRepository.findById(id); }
+    public List<Genre> getAll() {
+        return genreRepository.findAll();
+    }
+
+    public Genre getById(long id) {
+        return genreRepository.findById(id);
+    }
 }

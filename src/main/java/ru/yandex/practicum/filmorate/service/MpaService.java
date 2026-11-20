@@ -12,6 +12,11 @@ import java.util.List;
 public class MpaService {
     private final MpaRepository mpaRepository;
 
-    public List<MpaRating> getAll() { return mpaRepository.findAll(); }
-    public MpaRating getById(long id) { return mpaRepository.findById(id); }
+    public List<MpaRating> getAll() {
+        return mpaRepository.findAll();
+    }
+
+    public MpaRating getById(long id) {
+        return mpaRepository.findById(id);
+    }
 }

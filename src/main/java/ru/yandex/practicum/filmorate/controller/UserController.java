@@ -1,12 +1,13 @@
 package ru.yandex.practicum.filmorate.controller;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import ru.yandex.practicum.filmorate.dto.UserMapper;
-import ru.yandex.practicum.filmorate.dto.UserResponse;
-import ru.yandex.practicum.filmorate.model.User;
+import ru.yandex.practicum.filmorate.dto.NewUserRequest;
+import ru.yandex.practicum.filmorate.dto.UpdateUserRequest;
+import ru.yandex.practicum.filmorate.dto.UserDTO;
+import ru.yandex.practicum.filmorate.mapper.UserMapper;
 import ru.yandex.practicum.filmorate.service.UserService;
 
 import java.util.List;
@@ -20,57 +21,51 @@ public class UserController {
     private final UserService userService;
 
     @GetMapping
-    public ResponseEntity<List<UserResponse>> findAll() {
-        List<UserResponse> body = userService.getAll().stream()
-                .map(UserMapper::toResponse)
+    public List<UserDTO> findAll() {
+        return userService.getAll().stream()
+                .map(UserMapper::toDTO)
                 .collect(Collectors.toList());
-        return ResponseEntity.ok(body);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<UserResponse> findById(@PathVariable Long id) {
-        return ResponseEntity.ok(UserMapper.toResponse(userService.getById(id)));
+    public UserDTO findById(@PathVariable Long id) {
+        return UserMapper.toDTO(userService.getById(id));
     }
 
     @PostMapping
-    public ResponseEntity<UserResponse> create(@RequestBody User user) {
-        User created = userService.add(user);
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(UserMapper.toResponse(created));
+    @ResponseStatus(HttpStatus.CREATED)
+    public UserDTO create(@RequestBody @Valid NewUserRequest request) {
+        return UserMapper.toDTO(userService.create(request));
     }
 
     @PutMapping
-    public ResponseEntity<UserResponse> update(@RequestBody User user) {
-        return ResponseEntity.ok(UserMapper.toResponse(userService.update(user)));
+    public UserDTO update(@RequestBody @Valid UpdateUserRequest request) {
+        return UserMapper.toDTO(userService.update(request));
     }
 
     @PutMapping("/{id}/friends/{friendId}")
-    public ResponseEntity<Void> addFriend(@PathVariable Long id, @PathVariable Long friendId) {
+    @ResponseStatus(HttpStatus.OK)
+    public void addFriend(@PathVariable Long id, @PathVariable Long friendId) {
         userService.addFriend(id, friendId);
-        return ResponseEntity.ok().build();
     }
 
     @DeleteMapping("/{id}/friends/{friendId}")
-    public ResponseEntity<Void> removeFriend(@PathVariable Long id, @PathVariable Long friendId) {
+    @ResponseStatus(HttpStatus.OK)
+    public void removeFriend(@PathVariable Long id, @PathVariable Long friendId) {
         userService.removeFriend(id, friendId);
-        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/{id}/friends")
-    public ResponseEntity<List<UserResponse>> getFriends(@PathVariable Long id) {
-        List<UserResponse> body = userService.getFriends(id).stream()
-                .map(UserMapper::toResponse)
+    public List<UserDTO> getFriends(@PathVariable Long id) {
+        return userService.getFriends(id).stream()
+                .map(UserMapper::toDTO)
                 .collect(Collectors.toList());
-        return ResponseEntity.ok(body);
     }
 
     @GetMapping("/{id}/friends/common/{otherId}")
-    public ResponseEntity<List<UserResponse>> getCommonFriends(@PathVariable Long id,
-                                                               @PathVariable Long otherId) {
-        List<UserResponse> body = userService.getCommonFriends(id, otherId).stream()
-                .map(UserMapper::toResponse)
+    public List<UserDTO> getCommonFriends(@PathVariable Long id, @PathVariable Long otherId) {
+        return userService.getCommonFriends(id, otherId).stream()
+                .map(UserMapper::toDTO)
                 .collect(Collectors.toList());
-        return ResponseEntity.ok(body);
     }
 }
